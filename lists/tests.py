@@ -1,32 +1,64 @@
-from django.test import TestCase
-from lists.models import Item
+import time
+from django.test import LiveServerTestCase
+from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 
-class HomePageTest(TestCase):
+MAX_WAIT = 5
 
-    def test_uses_home_template(self):
-        response = self.client.get('/')
-        self.assertTemplateUsed(response, 'home.html')
 
-    def test_can_save_a_POST_request(self):
-        self.client.post('/', data={'item_text': 'Um novo item de lista'})
-        self.assertEqual(Item.objects.count(), 1)
-        new_item = Item.objects.first()
-        self.assertEqual(new_item.text, 'Um novo item de lista')
+class NewVisitorTest(LiveServerTestCase):
 
-    def test_redirects_after_POST(self):
-        response = self.client.post('/', data={'item_text': 'Um novo item de lista'})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['location'], '/')
+    def setUp(self):
+        self.browser = webdriver.Firefox()
 
-    def test_only_saves_items_when_necessary(self):
-        self.client.get('/')
-        self.assertEqual(Item.objects.count(), 0)
+    def tearDown(self):
+        self.browser.quit()
 
-    def test_displays_all_list_items(self):
-        Item.objects.create(text='itemey 1')
-        Item.objects.create(text='itemey 2')
+    def test_can_start_a_list_for_one_user(self):
+        self.browser.get(self.live_server_url)
+        inputbox = self.browser.find_element(By.ID, 'id_new_item')
+        inputbox.send_keys('Comprar penas de pavão')
+        inputbox.send_keys(Keys.ENTER)
+        self.wait_for_row_in_list_table('1: Comprar penas de pavão')
 
-        response = self.client.get('/')
+        # Maria nota que sua lista tem um URL único
+        maria_list_url = self.browser.current_url
+        self.assertRegex(maria_list_url, '/lists/.+')
 
-        self.assertIn('itemey 1', response.content.decode())
-        self.assertIn('itemey 2', response.content.decode())
+    def test_multiple_users_can_start_lists_at_different_urls(self):
+        # Maria começa uma nova lista
+        self.browser.get(self.live_server_url)
+        inputbox = self.browser.find_element(By.ID, 'id_new_item')
+        inputbox.send_keys('Comprar penas de pavão')
+        inputbox.send_keys(Keys.ENTER)
+        self.wait_for_row_in_list_table('1: Comprar penas de pavão')
+
+        maria_list_url = self.browser.current_url
+
+        # Agora um novo usuário, João, entra no site
+        # Usamos uma nova sessão de navegador para garantir que nenhum dado de Maria vaze
+        self.browser.quit()
+        self.browser = webdriver.Firefox()
+
+        # João visita a página inicial. Não há sinal da lista de Maria
+        self.browser.get(self.live_server_url)
+        page_text = self.browser.find_element(By.TAG_NAME, 'body').text
+        self.assertNotIn('Comprar penas de pavão', page_text)
+
+        # João inicia uma nova lista inserindo um novo item
+        inputbox = self.browser.find_element(By.ID, 'id_new_item')
+        inputbox.send_keys('Comprar leite')
+        inputbox.send_keys(Keys.ENTER)
+        self.wait_for_row_in_list_table('1: Comprar leite')
+
+        # João ganha seu próprio URL exclusivo
+        joao_list_url = self.browser.current_url
+        self.assertRegex(joao_list_url, '/lists/.+')
+        self.assertNotEqual(joao_list_url, maria_list_url)
+
+        # Novamente, não há sinal da lista de Maria
+        page_text = self.browser.find_element(By.TAG_NAME, 'body').text
+        self.assertNotIn('Comprar penas de pavão', page_text)
+        self.assertIn('Comprar leite', page_text)

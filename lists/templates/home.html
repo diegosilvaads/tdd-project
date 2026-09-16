@@ -1,21 +1,11 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>To-Do lists</title>
-</head>
+<head><title>To-Do lists</title></head>
 <body>
-    <h1>Sua lista de tarefas</h1>
-
-    <form method="POST">
+    <h1>Inicie uma nova lista de tarefas</h1>
+    <form method="POST" action="/lists/new">
         {% csrf_token %}
         <input name="item_text" id="id_new_item" placeholder="Enter a to-do item" />
     </form>
-
-    <table id="id_list_table">
-        {% for item in items %}
-            <tr><td>{{ forloop.counter }}: {{ item.text }}</td></tr>
-        {% endfor %}
-    </table>
 </body>
 </html>
